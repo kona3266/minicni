@@ -8,6 +8,11 @@ type AllocatedIP struct {
 	Version string `json:"version"`
 	Address string `json:"address"`
 	Gateway string `json:"gateway"`
+	Interface int64 `json:"interface"`
+}
+
+type Interface struct {
+	Name string `json:"name"`
 }
 
 func GetAllIPs(cidr string) ([]string, error) {

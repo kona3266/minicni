@@ -48,7 +48,7 @@ func CreateOrUpdateBridge(name, ip string, mtu int) (*netlink.Bridge, error) {
 	if !ok {
 		return nil, fmt.Errorf("link %s already exists but is not a bridge type", name)
 	}
-	addrs, err := netlink.AddrList(currentBr, netlink.FAMILY_ALL)
+	addrs, err := netlink.AddrList(currentBr, netlink.FAMILY_V4)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list address for bridge %q: %v", name, err)
 	}
@@ -181,7 +181,7 @@ func GetVethIPInNS(netns ns.NetNS, ifName string) (string, error) {
 		if !ok {
 			return fmt.Errorf("link %s already exists but is not a veth type", ifName)
 		}
-		addrs, err := netlink.AddrList(veth, netlink.FAMILY_ALL)
+		addrs, err := netlink.AddrList(veth, netlink.FAMILY_V4)
 		if err != nil {
 			return fmt.Errorf("failed to list address for veth %q: %v", ifName, err)
 		}

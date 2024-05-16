@@ -14,5 +14,6 @@ type Handler interface {
 
 type AddCmdResult struct {
 	CniVersion string               `json:"cniVersion"`
-	IPs        *nettool.AllocatedIP `json:"ips"`
+	Interfaces []nettool.Interface `json:"interfaces"`
+	IPs        []nettool.AllocatedIP `json:"ips"`
 }

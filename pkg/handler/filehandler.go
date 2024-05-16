@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"net"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -103,18 +104,21 @@ func (fh *FileHandler) HandleAdd(cmdArgs *args.CmdArgs) error {
 		return fmt.Errorf("failed to write reserved IPs into file: %v", err)
 	}
 
+	gw, _, _ := net.ParseCIDR(gwIP)
+	gw_addr := gw.String()
+
 	addCmdResult := &AddCmdResult{
 		CniVersion: cniConfig.CniVersion,
-		IPs: &nettool.AllocatedIP{
-			Version: "IPv4",
-			Address: podIP,
-			Gateway: gwIP,
-		},
-	}
+		Interfaces: []nettool.Interface{{cmdArgs.IfName},},
+		IPs: []nettool.AllocatedIP{
+			{"4", podIP, gw_addr, 0},
+		}}
+
 	addCmdResultBytes, err := json.Marshal(addCmdResult)
 	if err != nil {
 		return err
 	}
+
 
 	// kubelet expects json format from stdout if success
 	fmt.Print(string(addCmdResultBytes))
