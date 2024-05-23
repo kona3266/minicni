@@ -26,7 +26,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "getting cmd arguments with error: %v", err)
 	}
 
-	fh := handler.NewFileHandler(IPStore)
+	fh := handler.NewFileHandler()
 
 	switch cmd {
 	case "ADD":

@@ -2,11 +2,8 @@ package handler
 
 import (
 	"encoding/json"
-	"net"
 	"fmt"
-	"io/ioutil"
-	"os"
-	"strings"
+	"net"
 
 	"github.com/morvencao/minicni/pkg/args"
 	"github.com/morvencao/minicni/pkg/nettool"
@@ -17,16 +14,14 @@ import (
 
 type FileHandler struct {
 	*version.VersionInfo
-	IPStore string
 }
 
-func NewFileHandler(filename string) Handler {
+func NewFileHandler() Handler {
 	return &FileHandler{
 		VersionInfo: &version.VersionInfo{
 			CniVersion:        version.Version,
 			SupportedVersions: []string{version.Version},
 		},
-		IPStore: filename,
 	}
 }
 
@@ -35,43 +30,15 @@ func (fh *FileHandler) HandleAdd(cmdArgs *args.CmdArgs) error {
 	if err := json.Unmarshal(cmdArgs.StdinData, &cniConfig); err != nil {
 		return err
 	}
-	allIPs, err := nettool.GetAllIPs(cniConfig.Subnet)
-	if err != nil {
+
+	gwIP, gw_addr, _ := nettool.GetFirstIp(cniConfig.Subnet)
+	if err := nettool.IpAmfs.SetIpUsed(gw_addr); err != nil {
 		return err
 	}
-	gwIP := allIPs[0]
 
-	// open or create the file that stores all the reserved IPs
-	f, err := os.OpenFile(fh.IPStore, os.O_RDWR|os.O_CREATE, 0600)
-	if err != nil {
-		return fmt.Errorf("failed to open file that stores reserved IPs %v", err)
-	}
-	defer f.Close()
-
-	// get all the reserved IPs from file
-	content, err := ioutil.ReadAll(f)
+	podIP, err := nettool.IpAmfs.AllocIp(cniConfig.Subnet)
 	if err != nil {
 		return err
-	}
-	reservedIPs := strings.Split(strings.TrimSpace(string(content)), "\n")
-
-	podIP := ""
-	for _, ip := range allIPs[1:] {
-		reserved := false
-		for _, rip := range reservedIPs {
-			if ip == rip {
-				reserved = true
-				break
-			}
-		}
-		if !reserved {
-			podIP = ip
-			reservedIPs = append(reservedIPs, podIP)
-			break
-		}
-	}
-	if podIP == "" {
-		return fmt.Errorf("no IP available")
 	}
 
 	// Create or update bridge
@@ -99,26 +66,17 @@ func (fh *FileHandler) HandleAdd(cmdArgs *args.CmdArgs) error {
 		return err
 	}
 
-	// write reserved IPs back into file
-	if err := ioutil.WriteFile(fh.IPStore, []byte(strings.Join(reservedIPs, "\n")), 0600); err != nil {
-		return fmt.Errorf("failed to write reserved IPs into file: %v", err)
-	}
-
-	gw, _, _ := net.ParseCIDR(gwIP)
-	gw_addr := gw.String()
-
 	addCmdResult := &AddCmdResult{
 		CniVersion: cniConfig.CniVersion,
-		Interfaces: []nettool.Interface{{cmdArgs.IfName},},
+		Interfaces: []nettool.Interface{{Name: cmdArgs.IfName}},
 		IPs: []nettool.AllocatedIP{
-			{"4", podIP, gw_addr, 0},
+			{Version: "4", Address: podIP, Gateway: gw_addr, Interface: 0},
 		}}
 
 	addCmdResultBytes, err := json.Marshal(addCmdResult)
 	if err != nil {
 		return err
 	}
-
 
 	// kubelet expects json format from stdout if success
 	fmt.Print(string(addCmdResultBytes))
@@ -128,6 +86,11 @@ func (fh *FileHandler) HandleAdd(cmdArgs *args.CmdArgs) error {
 
 func (fh *FileHandler) HandleDel(cmdArgs *args.CmdArgs) error {
 	netns, err := ns.GetNS(cmdArgs.Netns)
+	cniConfig := args.CNIConfiguration{}
+	if err := json.Unmarshal(cmdArgs.StdinData, &cniConfig); err != nil {
+		return err
+	}
+
 	if err != nil {
 		return err
 	}
@@ -135,32 +98,11 @@ func (fh *FileHandler) HandleDel(cmdArgs *args.CmdArgs) error {
 	if err != nil {
 		return err
 	}
-
-	// open or create the file that stores all the reserved IPs
-	f, err := os.OpenFile(fh.IPStore, os.O_RDWR|os.O_CREATE, 0600)
-	if err != nil {
-		return fmt.Errorf("failed to open file that stores reserved IPs %v", err)
-	}
-	defer f.Close()
-
-	// get all the reserved IPs from file
-	content, err := ioutil.ReadAll(f)
+	ipn, _, err := net.ParseCIDR(ip)
 	if err != nil {
 		return err
 	}
-	reservedIPs := strings.Split(strings.TrimSpace(string(content)), "\n")
-
-	for i, rip := range reservedIPs {
-		if rip == ip {
-			reservedIPs = append(reservedIPs[:i], reservedIPs[i+1:]...)
-			break
-		}
-	}
-
-	// write reserved IPs back into file
-	if err := ioutil.WriteFile(fh.IPStore, []byte(strings.Join(reservedIPs, "\n")), 0600); err != nil {
-		return fmt.Errorf("failed to write reserved IPs into file: %v", err)
-	}
+	nettool.IpAmfs.ReleaseIp(cniConfig.Subnet, ipn)
 
 	return nil
 }

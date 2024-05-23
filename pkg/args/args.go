@@ -2,7 +2,7 @@ package args
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 )
 
@@ -117,7 +117,7 @@ func GetArgsFromEnv() (string, *CmdArgs, error) {
 		return "", nil, fmt.Errorf("required environment variable is missing")
 	}
 
-	stdinData, err := ioutil.ReadAll(os.Stdin)
+	stdinData, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to read from stdin: %v", err)
 	}
